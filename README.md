@@ -31,8 +31,8 @@ Because the rules live on-chain, they're transparent and tamper-proof. It's a *c
 
 | | |
 |---|---|
-| **Contract** | `0xe53E3149C2F84DbB6916e8E00593E6310aeE621a` |
-| **Explorer** | https://sepolia.mantlescan.xyz/address/0xe53E3149C2F84DbB6916e8E00593E6310aeE621a |
+| **Contract** | `0xC327532a41157dA6B2984886D161C68295c095FB` |
+| **Explorer** | https://sepolia.mantlescan.xyz/address/0xC327532a41157dA6B2984886D161C68295c095FB |
 | **Chain** | Mantle Sepolia (id `5003`) |
 
 ---

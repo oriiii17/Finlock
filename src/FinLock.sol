@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {YieldVault} from "./YieldVault.sol";
+
 /**
  * @title FinLock
  * @notice Dompet tabungan disiplin di blockchain Mantle.
@@ -25,6 +27,9 @@ contract FinLock {
     /// @notice Panjang satu "bulan" untuk reset. Disederhanakan jadi 30 hari.
     uint256 public constant PERIODE_BULAN = 30 days;
 
+    /// @notice Porsi Dana Terkunci yang dititipkan ke YieldVault untuk menghasilkan bunga (70%).
+    uint256 public constant PORSI_VAULT = 70;
+
     // ============ STRUKTUR DATA ============
 
     /// @notice Data tabungan milik satu pengguna.
@@ -37,17 +42,29 @@ contract FinLock {
         uint256 jatahDaruratTersisa;// sisa jatah darurat bulan ini (mulai dari 3)
         uint256 indeksPeriode;      // penanda "bulan ke-berapa" (untuk reset)
         uint256 waktuMulai;         // kapan akun dibuat (untuk hitung streak)
+        uint256 vaultPokok;         // pokok yang dititip ke YieldVault (70% dari terkunci)
         bool aktif;                 // apakah pengguna sudah punya akun
     }
 
     /// @notice Memetakan alamat pengguna ke datanya. Ini "buku besar" FinLock.
     mapping(address => Akun) private akunPengguna;
 
+    /// @notice "Bank DeFi" tempat 70% dana terkunci ditumbuhkan (menghasilkan bunga).
+    YieldVault public vault;
+
+    constructor(address payable _vault) {
+        vault = YieldVault(_vault);
+    }
+
+    /// @notice Menerima MNT (mis. saat YieldVault mengembalikan pokok + bunga).
+    receive() external payable {}
+
     // ============ EVENT (catatan kejadian, untuk dibaca aplikasi web) ============
 
     event AkunDibuat(address indexed pengguna, uint256 danaTerkunci, uint256 danaPakai, uint256 waktuBuka);
     event DanaDipakai(address indexed pengguna, uint256 jumlah, bool pakaiJatahDarurat);
     event DanaTerkunciDitarik(address indexed pengguna, uint256 jumlah);
+    event DanaDitambah(address indexed pengguna, uint256 jumlah, uint256 keKunci);
 
     // ============ FUNGSI UTAMA ============
 
@@ -78,7 +95,39 @@ contract FinLock {
         a.waktuMulai = block.timestamp;
         a.aktif = true;
 
+        // Titipkan 70% dana terkunci ke YieldVault supaya menghasilkan bunga.
+        uint256 keVault = (_danaTerkunci * PORSI_VAULT) / 100;
+        a.vaultPokok = keVault;
+        if (keVault > 0) vault.setor{value: keVault}(msg.sender);
+
         emit AkunDibuat(msg.sender, a.danaTerkunci, a.danaPakai, _waktuBuka);
+    }
+
+    /**
+     * @notice Menambah dana (top-up) ke akun yang sudah ada — setor MNT lagi kapan saja.
+     * @param _keKunci berapa dari setoran ini yang ditambahkan ke Dana Terkunci (boleh 0).
+     *
+     * Sisanya (msg.value - _keKunci) masuk ke Dana Pakai. Tanggal buka tidak berubah.
+     * Inilah yang mewujudkan ide "tiap bulan uang masuk, sebagian dikunci lagi".
+     */
+    function tambahDana(uint256 _keKunci) external payable {
+        Akun storage a = akunPengguna[msg.sender];
+
+        require(a.aktif, "FinLock: kamu belum punya akun");
+        require(msg.value > 0, "FinLock: harus menyetor uang");
+        require(_keKunci <= msg.value, "FinLock: porsi kunci melebihi setoran");
+
+        a.danaTerkunci += _keKunci;
+        a.danaPakai += (msg.value - _keKunci);
+
+        // 70% dari tambahan kunci juga dititipkan ke YieldVault.
+        uint256 keVault = (_keKunci * PORSI_VAULT) / 100;
+        if (keVault > 0) {
+            a.vaultPokok += keVault;
+            vault.setor{value: keVault}(msg.sender);
+        }
+
+        emit DanaDitambah(msg.sender, msg.value, _keKunci);
     }
 
     /**
@@ -131,9 +180,17 @@ contract FinLock {
         require(a.danaTerkunci > 0, "FinLock: tidak ada dana terkunci");
         require(block.timestamp >= a.waktuBuka, "FinLock: belum waktunya membuka");
 
-        uint256 jumlah = a.danaTerkunci;
-        a.danaTerkunci = 0; // update DULU sebelum kirim
+        uint256 totalTerkunci = a.danaTerkunci;
+        uint256 pokokVault = a.vaultPokok;
+        uint256 ditahan = totalTerkunci - pokokVault; // 30% yang disimpan di FinLock
 
+        a.danaTerkunci = 0; // update DULU sebelum interaksi eksternal
+        a.vaultPokok = 0;
+
+        // Tarik pokok + bunga dari YieldVault (kembali ke kontrak ini).
+        uint256 dariVault = pokokVault > 0 ? vault.tarik(msg.sender) : 0;
+
+        uint256 jumlah = ditahan + dariVault; // 30% disimpan + (70% pokok + bunga)
         (bool sukses, ) = payable(msg.sender).call{value: jumlah}("");
         require(sukses, "FinLock: gagal mengirim uang");
 
@@ -183,6 +240,18 @@ contract FinLock {
             a.waktuMulai,
             a.aktif
         );
+    }
+
+    /// @notice Rincian alokasi: pokok di vault, nilai vault sekarang (pokok+bunga), & dana ditahan (30%).
+    function lihatAlokasi(address _pengguna)
+        external
+        view
+        returns (uint256 vaultPokok, uint256 vaultNilaiSekarang, uint256 ditahan)
+    {
+        Akun storage a = akunPengguna[_pengguna];
+        vaultPokok = a.vaultPokok;
+        vaultNilaiSekarang = vault.nilaiSekarang(_pengguna);
+        ditahan = a.danaTerkunci - a.vaultPokok;
     }
 
     /// @notice Menghitung sudah berapa HARI uang pengguna "bertahan" (untuk fitur streak).

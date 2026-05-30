@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {FinLock} from "../src/FinLock.sol";
+import {YieldVault} from "../src/YieldVault.sol";
 
 /**
  * @title Tes untuk FinLock
@@ -18,13 +19,19 @@ import {FinLock} from "../src/FinLock.sol";
  */
 contract FinLockTest is Test {
     FinLock finlock;
+    YieldVault vault;
 
     // Dua pengguna palsu untuk testing.
     address andi = address(0xA1);
     address budi = address(0xB2);
 
     function setUp() public {
-        finlock = new FinLock();
+        vault = new YieldVault();
+        finlock = new FinLock(payable(address(vault)));
+        vault.setFinLock(address(finlock));
+        // Danai pool bunga vault dengan MNT palsu.
+        vm.deal(address(this), 100 ether);
+        vault.danaiYield{value: 50 ether}();
         // Beri masing-masing 100 MNT palsu untuk diuji.
         vm.deal(andi, 100 ether);
         vm.deal(budi, 100 ether);
@@ -89,7 +96,8 @@ contract FinLockTest is Test {
         uint256 saldoSesudah = andi.balance;
         vm.stopPrank();
 
-        assertEq(saldoSesudah - saldoSebelum, 6 ether, "harus menerima 6 MNT terkunci");
+        // Sekarang dapat 6 MNT pokok + bunga dari YieldVault, jadi harus LEBIH dari 6.
+        assertGt(saldoSesudah - saldoSebelum, 6 ether, "harus menerima pokok + bunga (>6 MNT)");
     }
 
     // 5) Memakai dana DI DALAM batas tidak memotong jatah darurat.
@@ -136,7 +144,27 @@ contract FinLockTest is Test {
         vm.stopPrank();
     }
 
-    // 8) Ganti bulan -> jatah darurat terisi ulang jadi 3.
+    // 8b) Top-up: tambahDana menambah ke kunci & dana pakai dengan benar.
+    function test_TambahDana_Berhasil() public {
+        vm.startPrank(andi);
+        finlock.buatAkun{value: 10 ether}(6 ether, block.timestamp + 30 days, 2 ether);
+        // Awal: terkunci 6, pakai 4. Tambah 5 MNT: 2 ke kunci, 3 ke pakai.
+        finlock.tambahDana{value: 5 ether}(2 ether);
+        vm.stopPrank();
+
+        (uint256 terkunci, uint256 pakai,,,,,,) = finlock.lihatAkun(andi);
+        assertEq(terkunci, 8 ether, "terkunci harus 6+2=8");
+        assertEq(pakai, 7 ether, "pakai harus 4+3=7");
+    }
+
+    // 8c) tambahDana ditolak kalau belum punya akun.
+    function test_TambahDana_TolakTanpaAkun() public {
+        vm.prank(budi);
+        vm.expectRevert("FinLock: kamu belum punya akun");
+        finlock.tambahDana{value: 1 ether}(0);
+    }
+
+    // 9) Ganti bulan -> jatah darurat terisi ulang jadi 3.
     function test_ResetBulanan_IsiUlangJatah() public {
         vm.startPrank(budi);
         finlock.buatAkun{value: 50 ether}(10 ether, block.timestamp + 365 days, 1 ether);

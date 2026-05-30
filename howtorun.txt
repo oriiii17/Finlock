@@ -1,0 +1,5 @@
+Untuk menyalakan server
+npm run dev --prefix frontend
+
+port localhostnya:
+http://localhost:5173

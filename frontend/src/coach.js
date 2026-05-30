@@ -11,49 +11,42 @@ function pilih(daftar) {
 }
 
 /**
- * Membuat pesan Pelatih berdasarkan data tabungan.
+ * Membuat pesan Pelatih, DIPISAH per "intent" (tujuan).
+ * Mengembalikan array { ikon, teks } — tiap item ditampilkan sebagai bubble terpisah.
  * @param {object} d - { streakHari, jatahDarurat, sisaHari, lewatBatas, bisaTarik }
  */
 export function pesanPelatih(d) {
   const { streakHari = 0, jatahDarurat = 3, sisaHari = 0, lewatBatas = false, bisaTarik = false } = d
+  const pesan = []
 
-  // 1) Target sudah tercapai → rayakan.
+  // INTENT: pencapaian (target tercapai)
   if (bisaTarik) {
-    return pilih([
-      `Komitmenmu tercapai! 🎉 Uangmu bertahan ${streakHari} hari penuh. Kamu baru saja membuktikan kamu bisa — tarik dana terkuncimu dengan bangga!`,
-      `Kerja bagus! 🏆 ${streakHari} hari kamu tahan godaan. Dana terkuncimu sudah bisa dibuka. Ini bukti disiplinmu nyata.`,
-    ])
+    pesan.push({ ikon: 'party', teks: pilih([
+      `Komitmenmu tercapai! Uangmu bertahan ${streakHari} hari penuh — tarik dana terkuncimu dengan bangga.`,
+      `Kerja bagus! ${streakHari} hari kamu tahan godaan. Dana terkuncimu sudah bisa dibuka.`,
+    ]) })
+  } else {
+    // INTENT: semangat (berdasarkan streak)
+    if (streakHari >= 30) pesan.push({ ikon: 'flame', teks: `Luar biasa! Uangmu sudah bertahan ${streakHari} hari — kamu konsisten banget.` })
+    else if (streakHari >= 7) pesan.push({ ikon: 'flame', teks: `Mantap, sudah ${streakHari} hari bertahan! Kebiasaan baikmu mulai terbentuk.` })
+    else if (streakHari >= 1) pesan.push({ ikon: 'sprout', teks: `Awal yang bagus — ${streakHari} hari berjalan! Pelan-pelan tapi pasti.` })
+    else pesan.push({ ikon: 'sprout', teks: `Selamat memulai perjalanan nabungmu! Hari pertama adalah langkah tersulit, dan kamu sudah melewatinya.` })
+
+    // INTENT: dorongan menuju target
+    if (sisaHari <= 7) pesan.push({ ikon: 'target', teks: `Tinggal ${sisaHari} hari lagi menuju target — sedikit lagi, jangan menyerah!` })
+    else if (sisaHari <= 30) pesan.push({ ikon: 'target', teks: `${sisaHari} hari menuju target. Kamu pasti bisa.` })
+    else pesan.push({ ikon: 'calendar', teks: `Target masih ${sisaHari} hari lagi — santai, fokus satu hari demi satu hari.` })
   }
 
-  // 2) Baru saja melewati batas → ingatkan lembut.
+  // INTENT: peringatan (lewat batas / jatah darurat menipis)
   if (lewatBatas) {
-    if (jatahDarurat <= 0)
-      return `Jatah daruratmu habis bulan ini 😬 Tapi tenang — dana terkuncimu tetap aman, dan bulan depan jatahmu penuh lagi. Tahan dulu, ya. 💪`
-    return pilih([
-      `Hati-hati ya 👀 Kamu baru pakai jatah darurat — sisa ${jatahDarurat} lagi bulan ini. Yakin pengeluaran tadi penting? Kamu masih on track kok. 💪`,
-      `Eits, itu tadi pakai jatah darurat 😅 Sisa ${jatahDarurat}. Tidak apa-apa sesekali, tapi simpan buat yang benar-benar mendesak, ya.`,
-    ])
+    if (jatahDarurat <= 0) pesan.push({ ikon: 'alert', teks: `Jatah daruratmu habis bulan ini. Tapi dana terkuncimu tetap aman — bulan depan jatahmu penuh lagi.` })
+    else pesan.push({ ikon: 'eye', teks: `Hati-hati, kamu baru pakai jatah darurat — sisa ${jatahDarurat} bulan ini. Simpan untuk yang benar-benar mendesak.` })
+  } else if (jatahDarurat === 1 && !bisaTarik) {
+    pesan.push({ ikon: 'sos', teks: `Jatah daruratmu tinggal 1 — pakai hanya kalau mendesak, ya.` })
   }
 
-  // 3) Bagian semangat berdasarkan streak.
-  let semangat
-  if (streakHari >= 30) semangat = `Luar biasa! 🔥 Uangmu sudah bertahan ${streakHari} hari — kamu konsisten banget.`
-  else if (streakHari >= 7) semangat = `Mantap, sudah ${streakHari} hari bertahan! 💪 Kebiasaan baikmu mulai terbentuk.`
-  else if (streakHari >= 1) semangat = `Awal yang bagus — ${streakHari} hari berjalan! 🌱 Pelan-pelan tapi pasti.`
-  else semangat = `Selamat memulai perjalanan nabungmu! 🌱 Hari pertama adalah langkah tersulit, dan kamu sudah melewatinya.`
-
-  // 4) Bagian dorongan berdasarkan sisa hari menuju target.
-  let dorongan
-  if (sisaHari <= 0) dorongan = ''
-  else if (sisaHari <= 7) dorongan = ` Tinggal ${sisaHari} hari lagi menuju target — sedikit lagi, jangan menyerah!`
-  else if (sisaHari <= 30) dorongan = ` ${sisaHari} hari menuju target. Kamu pasti bisa.`
-  else dorongan = ` Target masih ${sisaHari} hari lagi — santai, fokus satu hari demi satu hari.`
-
-  // 5) Bonus pengingat jatah darurat kalau menipis.
-  let pengingat = ''
-  if (jatahDarurat === 1) pengingat = ' (Catatan: jatah daruratmu tinggal 1 — pakai hanya kalau mendesak ya.)'
-
-  return semangat + dorongan + pengingat
+  return pesan
 }
 
 /**
