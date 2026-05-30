@@ -292,6 +292,16 @@ function Dashboard({ data, busy, jumlahPakai, setJumlahPakai, pakaiDana, tarikTe
   const sisaHari = Math.max(0, Math.ceil((data.waktuBuka - sekarang) / 86400))
   const tglBuka = new Date(data.waktuBuka * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 
+  // Bagikan pencapaian ke X (Twitter) — mesin viral FinLock.
+  function bagikanKeX() {
+    const teks = bisaTarik
+      ? `Aku menyelesaikan komitmen nabungku di FinLock 🔒🎉 Uangku bertahan ${data.hariBertahan} hari terkunci di blockchain — tak bisa kuganggu gugat. Lindungi dirimu dari dirimu sendiri!`
+      : `Aku mengunci tabunganku di FinLock 🔒 dan sudah bertahan ${data.hariBertahan} hari 💪 Dompet yang melindungiku dari diriku sendiri, dijaga blockchain Mantle. Berani coba?`
+    const url = 'https://twitter.com/intent/tweet?text=' +
+      encodeURIComponent(teks + '\n\n#MantleAIHackathon @0xMantle')
+    window.open(url, '_blank', 'noopener')
+  }
+
   // Pesan dari Pelatih FinLock — dihitung langsung dari data (instan, gratis).
   const coach = pesanPelatih({
     streakHari: data.hariBertahan,
@@ -355,6 +365,7 @@ function Dashboard({ data, busy, jumlahPakai, setJumlahPakai, pakaiDana, tarikTe
       </div>
 
       <div className="actions" style={{ marginTop: 12 }}>
+        <button className="btn-primary" onClick={bagikanKeX}>🐦 Bagikan streak ke X</button>
         <button className="btn-danger" onClick={tarikTerkunci} disabled={!!busy || !bisaTarik}
           title={bisaTarik ? '' : 'Belum waktunya — masih terkunci'}>
           {bisaTarik ? '🔓 Tarik Terkunci' : '🔒 Terkunci sampai ' + tglBuka}
