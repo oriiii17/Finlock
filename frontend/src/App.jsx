@@ -4,6 +4,7 @@ import {
   FINLOCK_ADDRESS, MANTLE_SEPOLIA_HEX,
   getContract, bacaAkun, keWei, keMnt,
 } from './finlock'
+import { pesanPelatih, saranKunci } from './coach'
 
 function App() {
   const [akun, setAkun] = useState(null)        // alamat wallet yang terhubung
@@ -20,6 +21,16 @@ function App() {
   const [batas, setBatas] = useState('')
   // input "pakai dana"
   const [jumlahPakai, setJumlahPakai] = useState('')
+  const [saran, setSaran] = useState('')        // teks saran AI untuk jumlah kunci
+
+  // Pelatih FinLock menyarankan jumlah yang sebaiknya dikunci (instan, di browser).
+  function sarankanKunci() {
+    const s = parseFloat(setoran)
+    if (!s || s <= 0) return setPesan('Isi jumlah setoran dulu untuk dapat saran.')
+    const { kunci: k, alasan } = saranKunci(s)
+    setKunci(String(k))
+    setSaran('🤖 ' + alasan)
+  }
 
   // Membaca data akun dari blockchain.
   const muatData = useCallback(async (alamat) => {
@@ -216,8 +227,11 @@ function App() {
               </div>
               <div className="field">
                 <label>🔒 Jumlah dikunci mati (MNT)</label>
-                <input type="number" value={kunci} onChange={(e) => setKunci(e.target.value)} placeholder="contoh: 6" />
-                <div className="hint">Tidak boleh nol. Tidak bisa diambil sampai tanggal di bawah.</div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <input type="number" value={kunci} onChange={(e) => setKunci(e.target.value)} placeholder="contoh: 6" />
+                  <button type="button" className="btn-ghost" onClick={sarankanKunci} style={{ flexShrink: 0 }}>✨ Saran AI</button>
+                </div>
+                <div className="hint">{saran || 'Tidak boleh nol. Tidak bisa diambil sampai tanggal di bawah.'}</div>
               </div>
               <div className="field">
                 <label>📅 Tanggal buka kunci</label>
@@ -278,6 +292,15 @@ function Dashboard({ data, busy, jumlahPakai, setJumlahPakai, pakaiDana, tarikTe
   const sisaHari = Math.max(0, Math.ceil((data.waktuBuka - sekarang) / 86400))
   const tglBuka = new Date(data.waktuBuka * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 
+  // Pesan dari Pelatih FinLock — dihitung langsung dari data (instan, gratis).
+  const coach = pesanPelatih({
+    streakHari: data.hariBertahan,
+    jatahDarurat: data.jatahDarurat,
+    sisaHari,
+    lewatBatas: false,
+    bisaTarik,
+  })
+
   return (
     <>
       <h2>Tabunganku 🔒</h2>
@@ -318,11 +341,7 @@ function Dashboard({ data, busy, jumlahPakai, setJumlahPakai, pakaiDana, tarikTe
         <span className="avatar">🤖</span>
         <div className="bubble">
           <div className="who">Pelatih AI FinLock</div>
-          <div className="msg">
-            {bisaTarik
-              ? `Mantap! Komitmenmu tercapai 🎉 Uangmu bertahan ${data.hariBertahan} hari. Kamu bisa tarik dana terkunci sekarang.`
-              : `Uangmu sudah bertahan ${data.hariBertahan} hari! 💪 Sisa ${sisaHari} hari menuju target. Tahan, kamu pasti bisa. (Pelatih AI cerdas hadir di Tahap 4!)`}
-          </div>
+          <div className="msg">{coach}</div>
         </div>
       </div>
 
